@@ -31,6 +31,21 @@
             android:layout_marginTop="2dp"
             android:textColor="#E3E8FF"
             android:textSize="16sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/m_google"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:minHeight="44dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="📥  Pobierz z Kalendarza Google"
+            android:textColor="#283593"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="#FFFFFF"
+            app:cornerRadius="22dp" />
     </LinearLayout>
 
     <HorizontalScrollView

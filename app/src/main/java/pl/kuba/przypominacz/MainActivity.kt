@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.CalendarView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -18,10 +20,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
-    private var mode = 0                 // 0 Nadchodzące, 1 Dziś, 2 Kalendarz, 3 Zrobione
+    private var mode = 0                 // 0 Do zrobienia, 1 Dziś, 2 Kalendarz, 3 Zrobione
     private var calDay = Fmt.today()
 
     private lateinit var tabs: List<MaterialButton>
@@ -34,6 +37,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var list: RecyclerView
     private lateinit var empty: TextView
     private lateinit var adapter: TaskAdapter
+    private lateinit var googleBtn: MaterialButton
+
+    private val worker = Executors.newSingleThreadExecutor()
+    @Volatile private var importing = false
+
+    companion object {
+        private const val REQ_NOTIF = 1
+        private const val REQ_CALENDAR = 2
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,11 +87,14 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, EditActivity::class.java).putExtra("day", day))
         }
 
+        googleBtn = findViewById(R.id.m_google)
+        googleBtn.setOnClickListener { startGoogleImport() }
+
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
         }
     }
 
@@ -88,7 +103,129 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.m_date).text = Fmt.headerDate()
         load()
         TasksWidget.refresh(this)
+        // Automatyczne odświeżenie wydarzeń z Google przy każdym otwarciu
+        if (CalendarImport.hasPermission(this) && CalendarImport.selected(this).isNotEmpty()) {
+            runImport(CalendarImport.selected(this), silent = true)
+        }
+        updateGoogleButton()
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        worker.shutdown()
+    }
+
+    private fun updateGoogleButton() {
+        val on = CalendarImport.hasPermission(this) && CalendarImport.selected(this).isNotEmpty()
+        googleBtn.text = if (on) "🔄  Kalendarz Google: włączony" else "📥  Pobierz z Kalendarza Google"
+    }
+
+    // ---------- Kalendarz Google ----------
+
+    private fun startGoogleImport() {
+        if (CalendarImport.hasPermission(this)) {
+            chooseCalendars()
+        } else {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CALENDAR), REQ_CALENDAR)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_CALENDAR) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                chooseCalendars()
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("Brak dostępu do kalendarza")
+                    .setMessage(
+                        "Bez zgody na odczyt kalendarza nie da się pobrać wydarzeń.\n\n" +
+                            "Możesz ją włączyć w: Ustawienia → Aplikacje → Przypominacz → Uprawnienia → Kalendarz."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun chooseCalendars() {
+        val cals = CalendarImport.calendars(this)
+        if (cals.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Nie znaleziono kalendarzy")
+                .setMessage(
+                    "Telefon nie ma zsynchronizowanego żadnego kalendarza.\n\n" +
+                        "Sprawdź w Ustawienia → Konta i kopia zapasowa → Zarządzaj kontami → Google, " +
+                        "czy synchronizacja Kalendarza jest włączona."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val saved = CalendarImport.selected(this)
+        val labels = cals.map { c ->
+            if (c.account.isNotBlank() && c.account != c.name) "${c.name}\n${c.account}" else c.name
+        }.toTypedArray()
+        val checked = BooleanArray(cals.size) { i ->
+            if (saved.isEmpty()) cals[i].isGoogle else cals[i].id in saved
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Z których kalendarzy pobierać?")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton("Pobierz") { _, _ ->
+                val ids = cals.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
+                CalendarImport.setSelected(this, ids)
+                updateGoogleButton()
+                if (ids.isEmpty()) {
+                    Toast.makeText(this, "Pobieranie z Google wyłączone", Toast.LENGTH_SHORT).show()
+                } else {
+                    runImport(ids, silent = false)
+                }
+            }
+            .setNeutralButton("Wyłącz") { _, _ ->
+                CalendarImport.setSelected(this, emptySet())
+                updateGoogleButton()
+                Toast.makeText(this, "Pobieranie z Google wyłączone", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Anuluj", null)
+            .show()
+    }
+
+    private fun runImport(ids: Set<Long>, silent: Boolean) {
+        if (importing) return
+        importing = true
+        worker.execute {
+            val res = try {
+                CalendarImport.run(applicationContext, ids)
+            } catch (e: Exception) {
+                null
+            }
+            importing = false
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                load()
+                if (res == null) {
+                    if (!silent) Toast.makeText(this, "Nie udało się odczytać kalendarza", Toast.LENGTH_LONG).show()
+                } else if (!silent) {
+                    AlertDialog.Builder(this)
+                        .setTitle("📥 Pobrano z Kalendarza Google")
+                        .setMessage(
+                            "Nowe: ${res.added}\nZaktualizowane: ${res.updated}\nUsunięte: ${res.removed}\n\n" +
+                                "Wydarzenia od dziś na 12 miesięcy do przodu. " +
+                                "Od teraz lista odświeża się sama przy każdym otwarciu aplikacji."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else if (res.added + res.updated + res.removed > 0) {
+                    Toast.makeText(this, "Kalendarz Google: zaktualizowano", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // ---------- Lista ----------
 
     private fun styleTabs() {
         tabs.forEachIndexed { i, b ->
@@ -149,16 +286,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         adapter.submit(rows)
-        val noTasks = tasks.isEmpty()
-        empty.visibility = if (noTasks) View.VISIBLE else View.GONE
+        empty.visibility = if (tasks.isEmpty()) View.VISIBLE else View.GONE
         empty.text = when (mode) {
             0 -> "Nic nie czeka na zrobienie 🎉\nDotknij „Dodaj”, żeby zapisać wizytę lub zadanie."
             1 -> "Na dziś nic nie masz zaplanowanego."
             2 -> "W tym dniu nic nie masz."
             else -> "Brak zrobionych wpisów."
-        }
-        if (mode == 2 && noTasks) {
-            empty.visibility = View.VISIBLE
         }
     }
 }

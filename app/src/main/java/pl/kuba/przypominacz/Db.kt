@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Lokalna baza SQLite – wszystko zostaje w telefonie, bez chmury. */
 class Db private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 1) {
+    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 2) {
 
     companion object {
         @Volatile private var inst: Db? = null
@@ -28,12 +28,19 @@ class Db private constructor(ctx: Context) :
                 "place TEXT," +
                 "notes TEXT," +
                 "remind INTEGER NOT NULL," +
-                "done INTEGER NOT NULL DEFAULT 0)"
+                "done INTEGER NOT NULL DEFAULT 0," +
+                "ext TEXT NOT NULL DEFAULT '')"
         )
         db.execSQL("CREATE INDEX idx_day ON tasks(day)")
+        db.execSQL("CREATE INDEX idx_ext ON tasks(ext)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE tasks ADD COLUMN ext TEXT NOT NULL DEFAULT ''")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_ext ON tasks(ext)")
+        }
+    }
 
     private fun values(t: Task) = ContentValues().apply {
         put("title", t.title)
@@ -44,6 +51,7 @@ class Db private constructor(ctx: Context) :
         put("notes", t.notes)
         put("remind", t.remind)
         put("done", if (t.done) 1 else 0)
+        put("ext", t.ext)
     }
 
     fun save(t: Task): Long {
@@ -66,6 +74,8 @@ class Db private constructor(ctx: Context) :
 
     fun get(id: Long): Task? = query("id=?", arrayOf(id.toString())).firstOrNull()
 
+    fun byExt(ext: String): Task? = query("ext=?", arrayOf(ext)).firstOrNull()
+
     private fun query(where: String?, args: Array<String>?, order: String = ORDER): List<Task> {
         val out = ArrayList<Task>()
         readableDatabase.query("tasks", null, where, args, null, null, order).use { c ->
@@ -80,7 +90,8 @@ class Db private constructor(ctx: Context) :
                         place = c.getString(c.getColumnIndexOrThrow("place")) ?: "",
                         notes = c.getString(c.getColumnIndexOrThrow("notes")) ?: "",
                         remind = c.getInt(c.getColumnIndexOrThrow("remind")),
-                        done = c.getInt(c.getColumnIndexOrThrow("done")) == 1
+                        done = c.getInt(c.getColumnIndexOrThrow("done")) == 1,
+                        ext = c.getString(c.getColumnIndexOrThrow("ext")) ?: ""
                     )
                 )
             }
@@ -101,11 +112,30 @@ class Db private constructor(ctx: Context) :
     /** Zrobione – od najnowszych. */
     fun doneList() = query("done=1", null, "day DESC, minutes DESC, id DESC")
 
-    /** Widget: zaległe + najbliższe dni niezrobione, a dzisiejsze także zrobione (przekreślone). */
-    fun forWidget(today: Long, until: Long) = query(
-        "(done=0 AND day<=?) OR (done=1 AND day=?)",
-        arrayOf(until.toString(), today.toString())
-    )
+    /**
+     * Widget – wybrany miesiąc.
+     * Bieżący miesiąc: zaległe niezrobione + od dziś do końca miesiąca (zrobione przekreślone).
+     * Inny miesiąc: wszystkie wpisy z tego miesiąca.
+     */
+    fun widgetMonth(from: Long, to: Long, today: Long, current: Boolean): List<Task> =
+        if (current) {
+            query(
+                "(done=0 AND day<?) OR (day>=? AND day<=?)",
+                arrayOf(today.toString(), today.toString(), to.toString())
+            )
+        } else {
+            query("day>=? AND day<=?", arrayOf(from.toString(), to.toString()))
+        }
+
+    fun countBetween(from: Long, to: Long): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM tasks WHERE day>=? AND day<=?",
+            arrayOf(from.toString(), to.toString())
+        ).use { c -> return if (c.moveToFirst()) c.getInt(0) else 0 }
+    }
+
+    /** Przyszłe wpisy pobrane z Kalendarza Google (do synchronizacji). */
+    fun importedFrom(today: Long) = query("ext LIKE 'g:%' AND day>=?", arrayOf(today.toString()))
 
     fun withReminders() = query("done=0 AND remind>=0", null)
 

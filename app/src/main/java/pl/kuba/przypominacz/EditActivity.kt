@@ -77,6 +77,7 @@ class EditActivity : AppCompatActivity() {
             notesEdit.setText(task.notes)
             remind.setSelection(Fmt.remindIndex(task.remind))
             deleteBtn.visibility = View.VISIBLE
+            if (task.fromGoogle) findViewById<TextView>(R.id.e_google_note).visibility = View.VISIBLE
         } else {
             task.day = intent.getLongExtra("day", Fmt.today())
             task.type = Task.TYPE_TASK
@@ -310,6 +311,7 @@ class EditActivity : AppCompatActivity() {
             .setMessage(task.title)
             .setPositiveButton("Usuń") { _, _ ->
                 Reminders.cancel(this, task.id)
+                if (task.fromGoogle) CalendarImport.skip(this, task.ext)
                 Db.get(this).delete(task.id)
                 TasksWidget.refresh(this)
                 Toast.makeText(this, "Usunięto", Toast.LENGTH_SHORT).show()

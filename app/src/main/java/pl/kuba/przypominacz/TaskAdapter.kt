@@ -74,7 +74,8 @@ class TaskAdapter(
         h.notes.visibility = if (t.notes.isBlank()) View.GONE else View.VISIBLE
         h.notes.text = t.notes
 
-        h.type.text = Fmt.typeEmoji(t.type) + " " + Fmt.typeName(t.type)
+        h.type.text = Fmt.typeEmoji(t.type) + " " + Fmt.typeName(t.type) +
+            if (t.fromGoogle) "  ·  z Kalendarza Google" else ""
         h.type.setTextColor(color)
 
         h.itemView.setOnClickListener { onOpen(t) }

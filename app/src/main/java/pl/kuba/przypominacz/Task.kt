@@ -13,8 +13,11 @@ data class Task(
     var place: String = "",
     var notes: String = "",
     var remind: Int = -1,       // ile minut przed, -1 = brak przypomnienia
-    var done: Boolean = false
+    var done: Boolean = false,
+    var ext: String = ""        // "g:kalendarz:wydarzenie:początek" = pobrane z Kalendarza Google
 ) {
+    val fromGoogle: Boolean get() = ext.startsWith("g:")
+
     companion object {
         const val TYPE_TASK = 0
         const val TYPE_DOCTOR = 1
@@ -72,6 +75,15 @@ object Fmt {
 
     fun fullDate(day: Long): String =
         cap(LocalDate.ofEpochDay(day).format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", PL)))
+
+    fun monthName(ym: java.time.YearMonth): String =
+        cap(ym.format(DateTimeFormatter.ofPattern("LLLL yyyy", PL)))
+
+    fun countLabel(n: Int): String = when {
+        n == 1 -> "1 wpis"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "$n wpisy"
+        else -> "$n wpisów"
+    }
 
     fun headerDate(): String =
         cap(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", PL)))
