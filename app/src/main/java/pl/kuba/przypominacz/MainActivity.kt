@@ -117,23 +117,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateGoogleButton() {
         val on = CalendarImport.hasPermission(this) && CalendarImport.selected(this).isNotEmpty()
-        googleBtn.text = if (on) "🔄  Kalendarz Google: włączony" else "📥  Pobierz z Kalendarza Google"
+        googleBtn.text = when {
+            on && CalendarImport.writesToGoogle(this) -> "🔄  Kalendarz Google: w obie strony"
+            on -> "🔄  Kalendarz Google: tylko pobieranie"
+            else -> "📥  Połącz z Kalendarzem Google"
+        }
     }
 
     // ---------- Kalendarz Google ----------
 
     private fun startGoogleImport() {
-        if (CalendarImport.hasPermission(this)) {
+        if (CalendarImport.hasPermission(this) && CalendarImport.hasWrite(this)) {
             chooseCalendars()
         } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CALENDAR), REQ_CALENDAR)
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR),
+                REQ_CALENDAR
+            )
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_CALENDAR) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (CalendarImport.hasPermission(this)) {
                 chooseCalendars()
             } else {
                 AlertDialog.Builder(this)
@@ -174,26 +182,88 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Z których kalendarzy pobierać?")
             .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
-            .setPositiveButton("Pobierz") { _, _ ->
+            .setPositiveButton("Dalej") { _, _ ->
                 val ids = cals.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
-                CalendarImport.setSelected(this, ids)
-                updateGoogleButton()
-                if (ids.isEmpty()) {
-                    Toast.makeText(this, "Pobieranie z Google wyłączone", Toast.LENGTH_SHORT).show()
-                } else {
-                    runImport(ids, silent = false)
-                }
+                chooseTarget(cals, ids)
             }
             .setNeutralButton("Wyłącz") { _, _ ->
                 CalendarImport.setSelected(this, emptySet())
+                CalendarImport.setTarget(this, -1L)
                 updateGoogleButton()
-                Toast.makeText(this, "Pobieranie z Google wyłączone", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Synchronizacja z Google wyłączona", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Anuluj", null)
             .show()
     }
 
-    private fun runImport(ids: Set<Long>, silent: Boolean) {
+    /** Krok 2: do którego kalendarza zapisywać nowe wpisy z aplikacji. */
+    private fun chooseTarget(cals: List<CalendarImport.Cal>, ids: Set<Long>) {
+        val writable = if (CalendarImport.hasWrite(this)) cals.filter { it.writable } else emptyList()
+        if (writable.isEmpty()) {
+            finishSetup(ids, -1L)
+            return
+        }
+        val labels = writable.map { c ->
+            if (c.account.isNotBlank() && c.account != c.name) "${c.name}\n${c.account}" else c.name
+        } + "Nie zapisuj do Google"
+
+        val saved = CalendarImport.target(this)
+        var choice = writable.indexOfFirst { it.id == saved }
+        if (choice < 0) {
+            // domyślnie: główny kalendarz konta Google (nazwa = adres e-mail), potem dowolny zaznaczony
+            choice = writable.indexOfFirst { it.isGoogle && it.name == it.account && it.id in ids }
+            if (choice < 0) choice = writable.indexOfFirst { it.isGoogle && it.id in ids }
+            if (choice < 0) choice = writable.indexOfFirst { it.isGoogle }
+            if (choice < 0) choice = 0
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Gdzie zapisywać nowe wpisy z aplikacji?")
+            .setSingleChoiceItems(labels.toTypedArray(), choice) { _, which -> choice = which }
+            .setPositiveButton("Gotowe") { _, _ ->
+                val target = if (choice in writable.indices) writable[choice].id else -1L
+                finishSetup(ids, target)
+            }
+            .setNegativeButton("Anuluj", null)
+            .show()
+    }
+
+    private fun finishSetup(ids: Set<Long>, target: Long) {
+        // kalendarz docelowy też jest pobierany – zmiany zrobione w Google wracają do aplikacji
+        val all = if (target >= 0) ids + target else ids
+        CalendarImport.setSelected(this, all)
+        CalendarImport.setTarget(this, target)
+        updateGoogleButton()
+        if (all.isEmpty()) {
+            Toast.makeText(this, "Synchronizacja z Google wyłączona", Toast.LENGTH_SHORT).show()
+            return
+        }
+        runImport(all, silent = false) { offerPushExisting() }
+    }
+
+    /** Po włączeniu zapisu: wysłać też wcześniejsze wpisy z aplikacji? */
+    private fun offerPushExisting() {
+        if (!CalendarImport.writesToGoogle(this)) return
+        val n = Db.get(this).localFuture(Fmt.today()).size
+        if (n == 0) return
+        AlertDialog.Builder(this)
+            .setTitle("Wysłać wcześniejsze wpisy?")
+            .setMessage("W aplikacji masz ${Fmt.countLabel(n)} (od dziś), których nie ma w Kalendarzu Google. Dodać je tam?")
+            .setPositiveButton("Tak, dodaj") { _, _ ->
+                worker.execute {
+                    val sent = try { CalendarImport.pushExisting(applicationContext) } catch (e: Exception) { 0 }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        load()
+                        Toast.makeText(this, "Dodano do Google: $sent", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Nie", null)
+            .show()
+    }
+
+    private fun runImport(ids: Set<Long>, silent: Boolean, after: (() -> Unit)? = null) {
         if (importing) return
         importing = true
         worker.execute {
@@ -209,14 +279,18 @@ class MainActivity : AppCompatActivity() {
                 if (res == null) {
                     if (!silent) Toast.makeText(this, "Nie udało się odczytać kalendarza", Toast.LENGTH_LONG).show()
                 } else if (!silent) {
+                    val writeInfo = if (CalendarImport.writesToGoogle(this))
+                        "\n\nNowe i zmienione wpisy z aplikacji będą same zapisywane w Kalendarzu Google."
+                    else ""
                     AlertDialog.Builder(this)
                         .setTitle("📥 Pobrano z Kalendarza Google")
                         .setMessage(
                             "Nowe: ${res.added}\nZaktualizowane: ${res.updated}\nUsunięte: ${res.removed}\n\n" +
                                 "Wydarzenia od dziś na 12 miesięcy do przodu. " +
-                                "Od teraz lista odświeża się sama przy każdym otwarciu aplikacji."
+                                "Od teraz lista odświeża się sama przy każdym otwarciu aplikacji." + writeInfo
                         )
-                        .setPositiveButton("OK", null)
+                        .setPositiveButton("OK") { _, _ -> after?.invoke() }
+                        .setOnCancelListener { after?.invoke() }
                         .show()
                 } else if (res.added + res.updated + res.removed > 0) {
                     Toast.makeText(this, "Kalendarz Google: zaktualizowano", Toast.LENGTH_SHORT).show()

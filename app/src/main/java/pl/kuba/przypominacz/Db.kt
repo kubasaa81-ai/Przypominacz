@@ -137,6 +137,9 @@ class Db private constructor(ctx: Context) :
     /** Przyszłe wpisy pobrane z Kalendarza Google (do synchronizacji). */
     fun importedFrom(today: Long) = query("ext LIKE 'g:%' AND day>=?", arrayOf(today.toString()))
 
+    /** Wpisy utworzone w aplikacji (nie z Google), od dziś, niezrobione. */
+    fun localFuture(today: Long) = query("ext='' AND done=0 AND day>=?", arrayOf(today.toString()))
+
     fun withReminders() = query("done=0 AND remind>=0", null)
 
     fun daysWithEntries(from: Long, to: Long): List<Long> {

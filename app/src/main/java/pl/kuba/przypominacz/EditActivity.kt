@@ -293,31 +293,64 @@ class EditActivity : AppCompatActivity() {
     }
 
     private fun save(title: String) {
+        val before = task.copy()
         task.title = title
         task.minutes = currentMinutes()
         task.place = placeEdit.text?.toString()?.trim().orEmpty()
         task.notes = notesEdit.text?.toString()?.trim().orEmpty()
         task.remind = Fmt.REMIND_VALUES[remind.selectedItemPosition]
+
+        // Synchronizacja z Kalendarzem Google
+        var msg = "Zapisano ✓"
+        if (task.ext.isEmpty()) {
+            if (CalendarImport.writesToGoogle(this)) {
+                msg = if (CalendarImport.pushNew(this, task)) "Zapisano ✓ i dodano do Kalendarza Google"
+                else "Zapisano ✓ (nie udało się dodać do Google)"
+            }
+        } else if (task.fromGoogle) {
+            val changed = before.title != task.title || before.day != task.day ||
+                before.minutes != task.minutes || before.place != task.place || before.notes != task.notes
+            if (changed) {
+                msg = if (CalendarImport.pushUpdate(this, task)) "Zapisano ✓ i zmieniono w Kalendarzu Google"
+                else "Zapisano tylko tutaj – to wydarzenie zmień w Kalendarzu Google (cykliczne lub tylko do odczytu)"
+            }
+        }
+
         Db.get(this).save(task)
         if (task.done) Reminders.cancel(this, task.id) else Reminders.schedule(this, task)
         TasksWidget.refresh(this)
-        Toast.makeText(this, "Zapisano ✓", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        finish()
+    }
+
+    private fun deleteHere(alsoGoogle: Boolean) {
+        Reminders.cancel(this, task.id)
+        var msg = "Usunięto"
+        if (task.fromGoogle) {
+            if (alsoGoogle && CalendarImport.deleteRemote(this, task)) {
+                msg = "Usunięto tutaj i z Kalendarza Google"
+            } else {
+                CalendarImport.skip(this, task.ext)    // żeby nie wrócił przy następnym pobraniu
+            }
+        }
+        Db.get(this).delete(task.id)
+        TasksWidget.refresh(this)
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         finish()
     }
 
     private fun confirmDelete() {
-        AlertDialog.Builder(this)
+        val b = AlertDialog.Builder(this)
             .setTitle("Usunąć wpis?")
             .setMessage(task.title)
-            .setPositiveButton("Usuń") { _, _ ->
-                Reminders.cancel(this, task.id)
-                if (task.fromGoogle) CalendarImport.skip(this, task.ext)
-                Db.get(this).delete(task.id)
-                TasksWidget.refresh(this)
-                Toast.makeText(this, "Usunięto", Toast.LENGTH_SHORT).show()
-                finish()
-            }
             .setNegativeButton("Anuluj", null)
-            .show()
+        if (CalendarImport.canWriteBack(this, task)) {
+            b.setMessage(task.title + "\n\nTen wpis jest też w Kalendarzu Google.")
+            b.setPositiveButton("Usuń też z Google") { _, _ -> deleteHere(alsoGoogle = true) }
+            b.setNeutralButton("Tylko tutaj") { _, _ -> deleteHere(alsoGoogle = false) }
+        } else {
+            b.setPositiveButton("Usuń") { _, _ -> deleteHere(alsoGoogle = false) }
+        }
+        b.show()
     }
 }

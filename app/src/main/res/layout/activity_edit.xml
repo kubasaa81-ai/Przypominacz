@@ -38,7 +38,7 @@
                 android:layout_marginBottom="12dp"
                 android:background="#FFF8E1"
                 android:padding="12dp"
-                android:text="📥 Wpis pobrany z Kalendarza Google. Tytuł, datę i godzinę zmieniaj w Kalendarzu Google – tutaj zostaną nadpisane przy następnym pobraniu. Rodzaj, przypomnienie i odhaczenie zostają."
+                android:text="🔄 Wpis połączony z Kalendarzem Google. Zmiany tytułu, daty, godziny, miejsca i notatki zapiszą się też w Google. Wydarzenia cykliczne zmieniaj w Kalendarzu Google."
                 android:textColor="#6D4C00"
                 android:textSize="14sp"
                 android:visibility="gone" />
