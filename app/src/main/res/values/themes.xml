@@ -18,6 +18,15 @@
         <item name="android:windowBackground">@color/bg</item>
     </style>
 
+    <style name="Theme.Przypominacz.Confirm" parent="Theme.Material3.Light.Dialog">
+        <item name="colorPrimary">#3949AB</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
     <style name="TabButton" parent="Widget.Material3.Button">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

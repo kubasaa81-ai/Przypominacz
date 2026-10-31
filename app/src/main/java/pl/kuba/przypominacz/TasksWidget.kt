@@ -102,12 +102,13 @@ class TasksWidget : AppWidgetProvider() {
             rv.setRemoteAdapter(R.id.w_list, svc)
             rv.setEmptyView(R.id.w_list, R.id.w_empty)
 
-            // Dotknięcie wiersza = odhacz / odznacz
-            val toggle = Intent(ctx, TasksWidget::class.java).setAction(ACTION_TOGGLE)
+            // Dotknięcie wiersza = okienko „Czy wykonano?” – odhacza dopiero po potwierdzeniu
+            val confirm = Intent(ctx, ConfirmActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             rv.setPendingIntentTemplate(
                 R.id.w_list,
-                PendingIntent.getBroadcast(
-                    ctx, 0, toggle,
+                PendingIntent.getActivity(
+                    ctx, 0, confirm,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
             )
