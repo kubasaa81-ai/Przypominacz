@@ -21,8 +21,44 @@ data class Task(
     companion object {
         const val TYPE_TASK = 0
         const val TYPE_DOCTOR = 1
-        const val TYPE_EVENT = 2
+        const val TYPE_EVENT = 2      // „Inne” – nie da się usunąć, tu trafiają wpisy z usuniętych rodzajów
     }
+}
+
+/** Rodzaj wpisu (Lekarz, Zajęcia, Spotkanie…) – każdy ma własny słownik. */
+data class Category(
+    var id: Int = -1,
+    var name: String = "",
+    var emoji: String = "📌",
+    var color: Int = 0xFF3949AB.toInt(),
+    var sort: Int = 5
+) {
+    val builtIn: Boolean get() = id in 0..2
+}
+
+/** Pozycja słownika: gotowy tytuł (i opcjonalnie miejsce) dla danego rodzaju. */
+data class DictItem(val id: Long, val cat: Int, val text: String, val place: String)
+
+/** Pamięć podręczna rodzajów – wczytywana przy starcie aplikacji (App) i po każdej zmianie. */
+object Cats {
+    @Volatile private var list: List<Category> = emptyList()
+
+    val PALETTE = intArrayOf(
+        0xFF1E88E5.toInt(), 0xFF00897B.toInt(), 0xFF8E24AA.toInt(), 0xFFEF6C00.toInt(),
+        0xFFD81B60.toInt(), 0xFF43A047.toInt(), 0xFF6D4C41.toInt(), 0xFF3949AB.toInt(),
+        0xFFF9A825.toInt(), 0xFF546E7A.toInt()
+    )
+
+    fun reload(ctx: android.content.Context) {
+        list = Db.get(ctx).categories()
+    }
+
+    fun all(): List<Category> = list
+
+    fun byId(id: Int): Category =
+        list.firstOrNull { it.id == id }
+            ?: list.firstOrNull { it.id == Task.TYPE_EVENT }
+            ?: Category(Task.TYPE_EVENT, "Inne", "📅", 0xFF8E24AA.toInt(), 9)
 }
 
 object Fmt {
@@ -40,23 +76,11 @@ object Fmt {
     fun time(m: Int): String =
         if (m < 0) "cały dzień" else String.format(Locale.US, "%02d:%02d", m / 60, m % 60)
 
-    fun typeName(t: Int) = when (t) {
-        Task.TYPE_DOCTOR -> "Wizyta u lekarza"
-        Task.TYPE_EVENT -> "Wydarzenie"
-        else -> "Zadanie"
-    }
+    fun typeName(t: Int) = Cats.byId(t).name
 
-    fun typeEmoji(t: Int) = when (t) {
-        Task.TYPE_DOCTOR -> "🩺"
-        Task.TYPE_EVENT -> "📅"
-        else -> "✅"
-    }
+    fun typeEmoji(t: Int) = Cats.byId(t).emoji
 
-    fun typeColor(t: Int) = when (t) {
-        Task.TYPE_DOCTOR -> 0xFF00897B.toInt()
-        Task.TYPE_EVENT -> 0xFF8E24AA.toInt()
-        else -> 0xFF1E88E5.toInt()
-    }
+    fun typeColor(t: Int) = Cats.byId(t).color
 
     private fun cap(s: String) = s.replaceFirstChar { it.titlecase(PL) }
 

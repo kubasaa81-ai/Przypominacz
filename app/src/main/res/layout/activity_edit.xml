@@ -45,46 +45,73 @@
 
             <TextView
                 style="@style/Label"
-                android:text="Rodzaj" />
+                android:text="Rodzaj (przytrzymaj, aby zmienić lub usunąć)" />
 
-            <LinearLayout
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/e_types"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/e_type_task"
-                    style="@style/TypeButton"
-                    android:layout_marginEnd="6dp"
-                    android:text="✅ Zadanie" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/e_type_doctor"
-                    style="@style/TypeButton"
-                    android:layout_marginEnd="6dp"
-                    android:text="🩺 Lekarz" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/e_type_event"
-                    style="@style/TypeButton"
-                    android:text="📅 Inne" />
-            </LinearLayout>
+                app:chipSpacingHorizontal="6dp"
+                app:chipSpacingVertical="2dp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/e_title_layout"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:hint="Co? (np. Dentysta – kontrola)">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
                     android:id="@+id/e_title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:completionThreshold="1"
                     android:inputType="textCapSentences|textMultiLine"
+                    android:paddingStart="16dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="16dp"
                     android:textSize="17sp" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_dict_pick"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:maxLines="2"
+                    android:minHeight="52dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="📖 Ze słownika"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    app:backgroundTint="#5E35B1"
+                    app:cornerRadius="14dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_dict_add"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="2"
+                    android:minHeight="52dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="➕ Do słownika"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    app:backgroundTint="#00897B"
+                    app:cornerRadius="14dp" />
+            </LinearLayout>
 
             <TextView
                 style="@style/Label"

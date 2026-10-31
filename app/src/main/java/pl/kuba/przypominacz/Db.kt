@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Lokalna baza SQLite – wszystko zostaje w telefonie, bez chmury. */
 class Db private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 2) {
+    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 3) {
 
     companion object {
         @Volatile private var inst: Db? = null
@@ -33,6 +33,7 @@ class Db private constructor(ctx: Context) :
         )
         db.execSQL("CREATE INDEX idx_day ON tasks(day)")
         db.execSQL("CREATE INDEX idx_ext ON tasks(ext)")
+        createCategoriesAndDict(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -40,6 +41,124 @@ class Db private constructor(ctx: Context) :
             db.execSQL("ALTER TABLE tasks ADD COLUMN ext TEXT NOT NULL DEFAULT ''")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_ext ON tasks(ext)")
         }
+        if (oldVersion < 3) createCategoriesAndDict(db)
+    }
+
+    private fun createCategoriesAndDict(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS categories(" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "name TEXT NOT NULL," +
+                "emoji TEXT NOT NULL," +
+                "color INTEGER NOT NULL," +
+                "sort INTEGER NOT NULL DEFAULT 5)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS dict(" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "cat INTEGER NOT NULL," +
+                "text TEXT NOT NULL," +
+                "place TEXT NOT NULL DEFAULT ''," +
+                "UNIQUE(cat, text))"
+        )
+        // Rodzaje startowe (0–2 zgodne z wcześniejszymi wersjami aplikacji)
+        val seed = listOf(
+            Category(0, "Zadanie", "✅", 0xFF1E88E5.toInt(), 0),
+            Category(1, "Lekarz", "🩺", 0xFF00897B.toInt(), 1),
+            Category(3, "Spotkanie", "🤝", 0xFFEF6C00.toInt(), 2),
+            Category(4, "Zajęcia", "🎓", 0xFFD81B60.toInt(), 3),
+            Category(2, "Inne", "📅", 0xFF8E24AA.toInt(), 99)
+        )
+        seed.forEach { c ->
+            db.insertWithOnConflict("categories", null, ContentValues().apply {
+                put("id", c.id)
+                put("name", c.name)
+                put("emoji", c.emoji)
+                put("color", c.color)
+                put("sort", c.sort)
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+
+    // ---------- Rodzaje ----------
+
+    fun categories(): List<Category> {
+        val out = ArrayList<Category>()
+        readableDatabase.rawQuery(
+            "SELECT id, name, emoji, color, sort FROM categories ORDER BY sort ASC, id ASC", null
+        ).use { c ->
+            while (c.moveToNext()) {
+                out.add(Category(c.getInt(0), c.getString(1), c.getString(2), c.getInt(3), c.getInt(4)))
+            }
+        }
+        return out
+    }
+
+    fun saveCategory(c: Category): Int {
+        val cv = ContentValues().apply {
+            put("name", c.name)
+            put("emoji", c.emoji)
+            put("color", c.color)
+            put("sort", c.sort)
+        }
+        if (c.id < 0) {
+            c.id = writableDatabase.insert("categories", null, cv).toInt()
+        } else {
+            writableDatabase.update("categories", cv, "id=?", arrayOf(c.id.toString()))
+        }
+        return c.id
+    }
+
+    /** Usuwa rodzaj: jego wpisy przechodzą do „Inne”, słownik znika. */
+    fun deleteCategory(id: Int) {
+        if (id in 0..2) return
+        val w = writableDatabase
+        w.beginTransaction()
+        try {
+            w.execSQL("UPDATE tasks SET type=? WHERE type=?", arrayOf<Any>(Task.TYPE_EVENT, id))
+            w.delete("dict", "cat=?", arrayOf(id.toString()))
+            w.delete("categories", "id=?", arrayOf(id.toString()))
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    // ---------- Słowniki ----------
+
+    private fun dictQuery(where: String?, args: Array<String>?): List<DictItem> {
+        val out = ArrayList<DictItem>()
+        readableDatabase.query("dict", arrayOf("id", "cat", "text", "place"), where, args, null, null,
+            "text COLLATE NOCASE ASC").use { c ->
+            while (c.moveToNext()) out.add(DictItem(c.getLong(0), c.getInt(1), c.getString(2), c.getString(3) ?: ""))
+        }
+        return out
+    }
+
+    fun dict(cat: Int) = dictQuery("cat=?", arrayOf(cat.toString()))
+
+    fun dictAll() = dictQuery(null, null)
+
+    /** Zwraca false, jeśli taki wpis już jest w słowniku tego rodzaju (wtedy aktualizuje miejsce). */
+    fun addDict(cat: Int, text: String, place: String): Boolean {
+        val cv = ContentValues().apply {
+            put("cat", cat)
+            put("text", text)
+            put("place", place)
+        }
+        val id = writableDatabase.insertWithOnConflict("dict", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+        if (id == -1L) {
+            if (place.isNotBlank()) {
+                writableDatabase.update("dict", ContentValues().apply { put("place", place) },
+                    "cat=? AND text=?", arrayOf(cat.toString(), text))
+            }
+            return false
+        }
+        return true
+    }
+
+    fun deleteDict(id: Long) {
+        writableDatabase.delete("dict", "id=?", arrayOf(id.toString()))
     }
 
     private fun values(t: Task) = ContentValues().apply {

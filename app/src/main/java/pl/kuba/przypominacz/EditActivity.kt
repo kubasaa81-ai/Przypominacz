@@ -2,9 +2,12 @@ package pl.kuba.przypominacz
 
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
@@ -12,8 +15,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.timepicker.MaterialTimePicker
@@ -27,9 +33,10 @@ class EditActivity : AppCompatActivity() {
     private var hasTime = true
     private var lastTime = 9 * 60
 
-    private lateinit var typeButtons: List<MaterialButton>
+    private lateinit var typeGroup: ChipGroup
+    private lateinit var dictPick: MaterialButton
     private lateinit var titleLayout: TextInputLayout
-    private lateinit var titleEdit: TextInputEditText
+    private lateinit var titleEdit: MaterialAutoCompleteTextView
     private lateinit var placeEdit: TextInputEditText
     private lateinit var notesEdit: TextInputEditText
     private lateinit var dateBtn: MaterialButton
@@ -43,11 +50,9 @@ class EditActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_edit)
 
-        typeButtons = listOf(
-            findViewById<MaterialButton>(R.id.e_type_task),
-            findViewById<MaterialButton>(R.id.e_type_doctor),
-            findViewById<MaterialButton>(R.id.e_type_event)
-        )
+        if (Cats.all().isEmpty()) Cats.reload(this)
+        typeGroup = findViewById(R.id.e_types)
+        dictPick = findViewById(R.id.e_dict_pick)
         titleLayout = findViewById(R.id.e_title_layout)
         titleEdit = findViewById(R.id.e_title)
         placeEdit = findViewById(R.id.e_place)
@@ -91,14 +96,11 @@ class EditActivity : AppCompatActivity() {
             deleteBtn.visibility = View.GONE
         }
 
-        typeButtons.forEachIndexed { i, b ->
-            b.setOnClickListener {
-                task.type = i
-                if (i == Task.TYPE_DOCTOR && remind.selectedItemPosition == Fmt.remindIndex(60)) {
-                    remind.setSelection(Fmt.remindIndex(1440))   // do lekarza – dzień wcześniej
-                }
-                styleTypes()
-            }
+        dictPick.setOnClickListener { pickFromDict() }
+        findViewById<MaterialButton>(R.id.e_dict_add).setOnClickListener { addToDict() }
+        titleEdit.setOnItemClickListener { parent, _, position, _ ->
+            val item = parent.getItemAtPosition(position) as? DictEntry ?: return@setOnItemClickListener
+            applyDict(item.item)
         }
 
         noTime.isChecked = !hasTime
@@ -114,24 +116,231 @@ class EditActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.e_cancel).setOnClickListener { finish() }
         deleteBtn.setOnClickListener { confirmDelete() }
 
-        styleTypes()
+        if (Cats.all().none { it.id == task.type }) task.type = Task.TYPE_EVENT
+        buildTypeChips()
+        refreshDict()
         refreshDateTime()
     }
 
-    private fun styleTypes() {
-        typeButtons.forEachIndexed { i, b ->
-            val c = Fmt.typeColor(i)
-            if (i == task.type) {
-                b.backgroundTintList = ColorStateList.valueOf(c)
-                b.setTextColor(0xFFFFFFFF.toInt())
-                b.strokeWidth = 0
+    // ---------- Rodzaje ----------
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun buildTypeChips() {
+        typeGroup.removeAllViews()
+        Cats.all().forEach { c ->
+            val chip = Chip(this)
+            chip.text = c.emoji + " " + c.name
+            chip.textSize = 15f
+            chip.isCheckable = false
+            chip.chipMinHeight = dp(42).toFloat()
+            chip.setEnsureMinTouchTargetSize(true)
+            if (c.id == task.type) {
+                chip.chipBackgroundColor = ColorStateList.valueOf(c.color)
+                chip.setTextColor(0xFFFFFFFF.toInt())
+                chip.chipStrokeWidth = 0f
+                chip.setTypeface(chip.typeface, Typeface.BOLD)
             } else {
-                b.backgroundTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
-                b.setTextColor(c)
-                b.strokeColor = ColorStateList.valueOf(c)
-                b.strokeWidth = (2 * resources.displayMetrics.density).toInt()
+                chip.chipBackgroundColor = ColorStateList.valueOf(0xFFFFFFFF.toInt())
+                chip.setTextColor(c.color)
+                chip.chipStrokeColor = ColorStateList.valueOf(c.color)
+                chip.chipStrokeWidth = dp(2).toFloat()
+            }
+            chip.setOnClickListener { selectType(c.id) }
+            chip.setOnLongClickListener { editCategory(c); true }
+            typeGroup.addView(chip)
+        }
+        val add = Chip(this)
+        add.text = "＋ Nowy rodzaj"
+        add.textSize = 15f
+        add.isCheckable = false
+        add.chipMinHeight = dp(42).toFloat()
+        add.chipBackgroundColor = ColorStateList.valueOf(0xFF546E7A.toInt())
+        add.setTextColor(0xFFFFFFFF.toInt())
+        add.chipStrokeWidth = 0f
+        add.setOnClickListener { editCategory(null) }
+        typeGroup.addView(add)
+    }
+
+    private fun selectType(id: Int) {
+        task.type = id
+        if (id == Task.TYPE_DOCTOR && remind.selectedItemPosition == Fmt.remindIndex(60)) {
+            remind.setSelection(Fmt.remindIndex(1440))   // do lekarza – dzień wcześniej
+        }
+        buildTypeChips()
+        refreshDict()
+    }
+
+    private fun editCategory(cat: Category?) {
+        val c = cat?.copy() ?: Category(id = -1, name = "", emoji = "📌", color = Cats.PALETTE[3], sort = 50)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+        }
+        val nameEdit = EditText(this).apply {
+            hint = "Nazwa (np. Zajęcia dodatkowe)"
+            setText(c.name)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val emojiEdit = EditText(this).apply {
+            hint = "Ikonka (emoji, np. ⚽ 🎵 💼)"
+            setText(c.emoji)
+        }
+        box.addView(nameEdit)
+        box.addView(emojiEdit)
+        box.addView(TextView(this).apply {
+            text = "Kolor:"
+            textSize = 15f
+            setPadding(0, dp(12), 0, dp(6))
+            setTextColor(0xFF424242.toInt())
+        })
+
+        val swatches = ArrayList<View>()
+        fun paint() {
+            Cats.PALETTE.forEachIndexed { i, col ->
+                val g = GradientDrawable()
+                g.shape = GradientDrawable.OVAL
+                g.setColor(col)
+                if (col == c.color) g.setStroke(dp(4), 0xFF212121.toInt())
+                swatches[i].background = g
             }
         }
+        Cats.PALETTE.toList().chunked(5).forEach { rowColors ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, 0, 0, dp(8))
+            }
+            rowColors.forEach { col ->
+                val v = View(this)
+                v.layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).also { it.marginEnd = dp(10) }
+                v.setOnClickListener { c.color = col; paint() }
+                swatches.add(v)
+                row.addView(v)
+            }
+            box.addView(row)
+        }
+        paint()
+
+        val b = AlertDialog.Builder(this)
+            .setTitle(if (cat == null) "Nowy rodzaj" else "Zmień rodzaj")
+            .setView(box)
+            .setPositiveButton("Zapisz", null)
+            .setNegativeButton("Anuluj", null)
+        if (cat != null && !cat.builtIn) b.setNeutralButton("Usuń", null)
+        val dlg = b.create()
+        dlg.setOnShowListener {
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameEdit.text.toString().trim()
+                if (name.isEmpty()) {
+                    nameEdit.error = "Wpisz nazwę"
+                    return@setOnClickListener
+                }
+                c.name = name
+                c.emoji = emojiEdit.text.toString().trim().ifEmpty { "📌" }.take(4)
+                val id = Db.get(this).saveCategory(c)
+                Cats.reload(this)
+                TasksWidget.refresh(this)
+                if (cat == null) task.type = id
+                buildTypeChips()
+                refreshDict()
+                dlg.dismiss()
+            }
+            dlg.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                AlertDialog.Builder(this)
+                    .setTitle("Usunąć rodzaj „${c.name}”?")
+                    .setMessage("Wpisy tego rodzaju przejdą do „Inne”, a jego słownik zostanie usunięty.")
+                    .setPositiveButton("Usuń") { _, _ ->
+                        Db.get(this).deleteCategory(c.id)
+                        Cats.reload(this)
+                        TasksWidget.refresh(this)
+                        if (task.type == c.id) task.type = Task.TYPE_EVENT
+                        buildTypeChips()
+                        refreshDict()
+                        dlg.dismiss()
+                    }
+                    .setNegativeButton("Anuluj", null)
+                    .show()
+            }
+        }
+        dlg.show()
+    }
+
+    // ---------- Słownik ----------
+
+    /** Pozycja na liście podpowiedzi – toString() to tekst wstawiany do pola. */
+    private class DictEntry(val item: DictItem) {
+        override fun toString() = item.text
+    }
+
+    private fun refreshDict() {
+        val items = Db.get(this).dict(task.type)
+        val cat = Cats.byId(task.type)
+        dictPick.text = "📖 Ze słownika\n" + cat.name + " (" + items.size + ")"
+        titleEdit.setAdapter(ArrayAdapter(this, R.layout.spinner_item, items.map { DictEntry(it) }))
+    }
+
+    private fun applyDict(d: DictItem) {
+        titleEdit.setText(d.text, false)
+        titleEdit.setSelection(titleEdit.text?.length ?: 0)
+        if (d.place.isNotBlank() && placeEdit.text.isNullOrBlank()) placeEdit.setText(d.place)
+        titleLayout.error = null
+    }
+
+    private fun pickFromDict() {
+        val cat = Cats.byId(task.type)
+        val items = Db.get(this).dict(task.type)
+        if (items.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("📖 Słownik: " + cat.name)
+                .setMessage(
+                    "Ten słownik jest jeszcze pusty.\n\nWpisz tytuł (i ewentualnie miejsce), " +
+                        "a potem dotknij „➕ Do słownika” – następnym razem wybierzesz go z listy."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val labels = items.map { if (it.place.isBlank()) it.text else it.text + "\n📍 " + it.place }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(cat.emoji + " Słownik: " + cat.name)
+            .setItems(labels) { _, which -> applyDict(items[which]) }
+            .setNeutralButton("🗑 Usuń pozycje") { _, _ -> deleteFromDict(items) }
+            .setNegativeButton("Zamknij", null)
+            .show()
+    }
+
+    private fun deleteFromDict(items: List<DictItem>) {
+        val checked = BooleanArray(items.size)
+        AlertDialog.Builder(this)
+            .setTitle("Zaznacz pozycje do usunięcia")
+            .setMultiChoiceItems(items.map { it.text }.toTypedArray(), checked) { _, w, c -> checked[w] = c }
+            .setPositiveButton("Usuń") { _, _ ->
+                var n = 0
+                items.forEachIndexed { i, d -> if (checked[i]) { Db.get(this).deleteDict(d.id); n++ } }
+                refreshDict()
+                Toast.makeText(this, "Usunięto ze słownika: $n", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Anuluj", null)
+            .show()
+    }
+
+    private fun addToDict() {
+        val text = titleEdit.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) {
+            titleLayout.error = "Najpierw wpisz tytuł, który chcesz zapisać w słowniku"
+            titleEdit.requestFocus()
+            return
+        }
+        titleLayout.error = null
+        val place = placeEdit.text?.toString()?.trim().orEmpty()
+        val cat = Cats.byId(task.type)
+        val added = Db.get(this).addDict(task.type, text, place)
+        refreshDict()
+        Toast.makeText(
+            this,
+            if (added) "Dodano do słownika „${cat.name}”" else "To już jest w słowniku „${cat.name}”",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun currentMinutes() = if (hasTime) lastTime else -1

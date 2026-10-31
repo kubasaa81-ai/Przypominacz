@@ -230,8 +230,14 @@ object CalendarImport {
 
     // ---------- Pobieranie z Kalendarza Google ----------
 
-    private fun guessType(title: String): Int {
+    private fun guessType(title: String, dict: List<DictItem>): Int {
         val t = title.lowercase(Fmt.PL)
+        // najpierw słowniki – tytuł z Google zgodny z pozycją słownika dostaje jej rodzaj
+        dict.firstOrNull { it.text.lowercase(Fmt.PL) == t }?.let { return it.cat }
+        dict.filter { it.text.length >= 4 }
+            .sortedByDescending { it.text.length }
+            .firstOrNull { t.contains(it.text.lowercase(Fmt.PL)) }
+            ?.let { return it.cat }
         val doctor = listOf(
             "lekarz", "dr ", "dr.", "doktor", "dentyst", "stomatolog", "przychodni", "wizyt",
             "badani", "pediatr", "okulist", "ortoped", "kardiolog", "laryngolog", "dermatolog",
@@ -249,6 +255,8 @@ object CalendarImport {
         val begin = today.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = today.plusDays(DAYS_AHEAD).atStartOfDay(zone).toInstant().toEpochMilli()
         val skipped = prefs(ctx).getStringSet(KEY_SKIP, emptySet())!!
+        val dict = db.dictAll()
+        val catIds = Cats.all().map { it.id }.toSet()
 
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
             ContentUris.appendId(it, begin)
@@ -299,7 +307,7 @@ object CalendarImport {
                 val old = db.byExt(ext)
                 if (old == null) {
                     val t = Task(
-                        title = title, type = guessType(title), day = day, minutes = minutes,
+                        title = title, type = guessType(title, dict).let { if (catIds.isEmpty() || it in catIds) it else Task.TYPE_EVENT }, day = day, minutes = minutes,
                         place = place, notes = notes, remind = -1, done = false, ext = ext
                     )
                     db.save(t)
