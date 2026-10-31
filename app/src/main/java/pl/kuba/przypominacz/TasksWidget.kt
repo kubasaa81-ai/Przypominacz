@@ -91,7 +91,7 @@ class TasksWidget : AppWidgetProvider() {
             rv.setTextViewText(R.id.w_month, Fmt.monthName(ym) + " · " + Fmt.countLabel(count))
             rv.setTextViewText(
                 R.id.w_empty,
-                if (offset == 0) "W tym miesiącu nic więcej 🎉\nDotknij +, aby dodać"
+                if (offset == 0) "W tym miesiącu nic nie masz 🎉\nDotknij +, aby dodać"
                 else "Brak wpisów w tym miesiącu.\nDotknij +, aby dodać"
             )
 
@@ -163,15 +163,13 @@ class WidgetService : RemoteViewsService() {
             val list = Db.get(ctx).widgetMonth(from, to, today, offset == 0)
 
             val out = ArrayList<Row>()
-            if (offset == 0) {
-                val overdue = list.filter { it.day < today }
-                if (overdue.isNotEmpty()) {
-                    out.add(Row("⚠ Zaległe", null))
-                    overdue.forEach { out.add(Row(null, it)) }
-                }
+            val overdue = if (offset == 0) list.filter { it.day < today && !it.done } else emptyList()
+            if (overdue.isNotEmpty()) {
+                out.add(Row("⚠ Zaległe", null))
+                overdue.forEach { out.add(Row(null, it)) }
             }
             var lastDay = Long.MIN_VALUE
-            list.filter { offset != 0 || it.day >= today }.forEach {
+            list.filter { it !in overdue }.forEach {
                 if (it.day != lastDay) {
                     out.add(Row(Fmt.dayLabel(it.day), null))
                     lastDay = it.day

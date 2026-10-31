@@ -233,14 +233,15 @@ class Db private constructor(ctx: Context) :
 
     /**
      * Widget – wybrany miesiąc.
-     * Bieżący miesiąc: zaległe niezrobione + od dziś do końca miesiąca (zrobione przekreślone).
+     * Bieżący miesiąc: zaległe niezrobione + cały miesiąc (zrobione zostają, przekreślone,
+     * żeby dało się je cofnąć prosto z widgetu).
      * Inny miesiąc: wszystkie wpisy z tego miesiąca.
      */
     fun widgetMonth(from: Long, to: Long, today: Long, current: Boolean): List<Task> =
         if (current) {
             query(
                 "(done=0 AND day<?) OR (day>=? AND day<=?)",
-                arrayOf(today.toString(), today.toString(), to.toString())
+                arrayOf(today.toString(), from.toString(), to.toString())
             )
         } else {
             query("day>=? AND day<=?", arrayOf(from.toString(), to.toString()))
