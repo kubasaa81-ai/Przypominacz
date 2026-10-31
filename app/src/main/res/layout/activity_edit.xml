@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/e_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_header"
+            android:paddingStart="20dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="16dp"
+            android:text="Nowy wpis"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                style="@style/Label"
+                android:text="Rodzaj" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_type_task"
+                    style="@style/TypeButton"
+                    android:layout_marginEnd="6dp"
+                    android:text="✅ Zadanie" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_type_doctor"
+                    style="@style/TypeButton"
+                    android:layout_marginEnd="6dp"
+                    android:text="🩺 Lekarz" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_type_event"
+                    style="@style/TypeButton"
+                    android:text="📅 Inne" />
+            </LinearLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/e_title_layout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:hint="Co? (np. Dentysta – kontrola)">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/e_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:textSize="17sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                style="@style/Label"
+                android:layout_marginTop="14dp"
+                android:text="Kiedy" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/e_date"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:minHeight="56dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                app:backgroundTint="#3949AB"
+                app:cornerRadius="14dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_time"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="start|center_vertical"
+                    android:minHeight="56dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    app:backgroundTint="#EF6C00"
+                    app:cornerRadius="14dp" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/e_no_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:text="Bez\ngodziny"
+                    android:textColor="#424242"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Panel: co już jest w tym dniu (kolizje) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/card_bg"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:id="@+id/e_day_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:textColor="#3949AB"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/e_day_rows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:hint="Gdzie? (adres, gabinet) – opcjonalnie">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/e_place"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapSentences|textMultiLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                style="@style/Label"
+                android:layout_marginTop="14dp"
+                android:text="🔔 Przypomnienie" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/card_bg">
+
+                <Spinner
+                    android:id="@+id/e_remind"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@android:color/transparent"
+                    android:minHeight="52dp"
+                    android:paddingEnd="40dp"
+                    android:spinnerMode="dropdown" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="14dp"
+                    android:text="▼"
+                    android:textColor="#3949AB"
+                    android:textSize="14sp" />
+            </FrameLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:hint="Notatki (np. zabrać skierowanie) – opcjonalnie">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/e_notes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top|start"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:minLines="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/e_save"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:minHeight="58dp"
+                android:text="💾  Zapisz"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                app:backgroundTint="#43A047"
+                app:cornerRadius="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="24dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_cancel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="52dp"
+                    android:text="Anuluj"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    app:backgroundTint="#546E7A"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_delete"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="52dp"
+                    android:text="🗑  Usuń"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    app:backgroundTint="#E53935"
+                    app:cornerRadius="16dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#F3F5FA</color>
+    <color name="primary">#3949AB</color>
+    <color name="launcher_bg">#3949AB</color>
+
+    <string name="app_name">Przypominacz</string>
+    <string name="widget_desc">Lista zadań i wizyt do odhaczania</string>
+
+    <style name="Theme.Przypominacz" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#3949AB</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#43A047</item>
+        <item name="colorSecondaryContainer">#C8E6C9</item>
+        <item name="android:statusBarColor">#283593</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#F3F5FA</item>
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+
+    <style name="TabButton" parent="Widget.Material3.Button">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="cornerRadius">24dp</item>
+    </style>
+
+    <style name="TypeButton" parent="Widget.Material3.Button">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+        <item name="cornerRadius">14dp</item>
+    </style>
+
+    <style name="Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:textColor">#424242</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>
