@@ -32,6 +32,20 @@ object CalendarImport {
     private const val KEY_CALS = "calendars"
     private const val KEY_SKIP = "skipped"
     private const val KEY_TARGET = "target"
+    private const val KEY_REMIND_MIGRATED = "remind_migrated_1"
+    private const val KEY_REMIND = "google_remind"
+
+    /** Przypomnienie dla wydarzeń z Google (minuty przed; -1 = brak). Domyślnie 1 godz. */
+    fun googleRemind(ctx: Context): Int = prefs(ctx).getInt(KEY_REMIND, 60)
+
+    fun setGoogleRemind(ctx: Context, v: Int) {
+        prefs(ctx).edit().putInt(KEY_REMIND, v).apply()
+    }
+
+    private var remindCache = 60
+
+    /** Wydarzenia całodniowe (np. święta) bez przypomnienia, z godziną – wg ustawienia. */
+    private fun defaultRemind(minutes: Int): Int = if (minutes < 0) -1 else remindCache
     const val DAYS_AHEAD = 365L
     const val DEFAULT_DURATION_MIN = 60L
 
@@ -249,6 +263,7 @@ object CalendarImport {
     /** Pobiera wydarzenia od dziś na rok do przodu z wybranych kalendarzy. */
     fun run(ctx: Context, calIds: Set<Long> = selected(ctx)): Result {
         if (!hasPermission(ctx) || calIds.isEmpty()) return Result(0, 0, 0)
+        remindCache = googleRemind(ctx)
         val db = Db.get(ctx)
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()
@@ -256,6 +271,7 @@ object CalendarImport {
         val end = today.plusDays(DAYS_AHEAD).atStartOfDay(zone).toInstant().toEpochMilli()
         val skipped = prefs(ctx).getStringSet(KEY_SKIP, emptySet())!!
         val dict = db.dictAll()
+        val migrated = prefs(ctx).getBoolean(KEY_REMIND_MIGRATED, false)
         val catIds = Cats.all().map { it.id }.toSet()
 
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
@@ -304,13 +320,21 @@ object CalendarImport {
                     minutes = z.hour * 60 + z.minute
                 }
 
-                val old = db.byExt(ext)
+                var old = db.byExt(ext)
+                // jednorazowo: starsze pobrane wpisy (bez przypomnienia) dostają przypomnienie
+                if (old != null && !migrated && old.remind < 0 && old.minutes >= 0 && !old.done) {
+                    old.remind = defaultRemind(old.minutes)
+                    db.save(old)
+                    Reminders.schedule(ctx, old)
+                    old = db.byExt(ext)
+                }
                 if (old == null) {
                     val t = Task(
                         title = title, type = guessType(title, dict).let { if (catIds.isEmpty() || it in catIds) it else Task.TYPE_EVENT }, day = day, minutes = minutes,
-                        place = place, notes = notes, remind = -1, done = false, ext = ext
+                        place = place, notes = notes, remind = defaultRemind(minutes), done = false, ext = ext
                     )
                     db.save(t)
+                    Reminders.schedule(ctx, t)
                     added++
                 } else if (old.title != title || old.place != place || old.notes != notes ||
                     old.day != day || old.minutes != minutes
@@ -338,6 +362,7 @@ object CalendarImport {
             }
         }
 
+        prefs(ctx).edit().putBoolean(KEY_REMIND_MIGRATED, true).apply()
         TasksWidget.refresh(ctx)
         return Result(added, updated, removed)
     }

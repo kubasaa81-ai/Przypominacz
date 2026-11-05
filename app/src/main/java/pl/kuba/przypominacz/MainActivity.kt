@@ -89,6 +89,7 @@ class MainActivity : AppCompatActivity() {
 
         googleBtn = findViewById(R.id.m_google)
         googleBtn.setOnClickListener { startGoogleImport() }
+        findViewById<MaterialButton>(R.id.m_sound).setOnClickListener { soundSettings() }
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -122,6 +123,76 @@ class MainActivity : AppCompatActivity() {
             on -> "🔄  Kalendarz Google: tylko pobieranie"
             else -> "📥  Połącz z Kalendarzem Google"
         }
+    }
+
+    // ---------- Przypomnienia / dźwięk ----------
+
+    private fun soundSettings() {
+        Reminders.createChannel(this)
+        val problem = Reminders.soundProblem(this)
+        val cur = CalendarImport.googleRemind(this)
+        val curLabel = Fmt.REMIND_LABELS[Fmt.remindIndex(cur)]
+        val msg = buildString {
+            if (problem != null) append("⚠ ").append(problem).append("\nDotknij „Ustawienia telefonu” i włącz dźwięk.\n\n")
+            append("Wydarzenia z Kalendarza Google: ").append(curLabel.lowercase(Fmt.PL)).append(".\n")
+            append("Własne wpisy: przypomnienie ustawiasz przy każdym wpisie.\n\n")
+            append("Samsung: Ustawienia → Aplikacje → Przypominacz → Bateria → „Bez ograniczeń”, ")
+            append("inaczej przypomnienia mogą się spóźniać.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("🔔 Przypomnienia")
+            .setMessage(msg)
+            .setPositiveButton("▶ Test dźwięku") { _, _ ->
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
+                } else {
+                    Reminders.showTest(this)
+                }
+            }
+            .setNeutralButton("Google: kiedy?") { _, _ -> chooseGoogleRemind() }
+            .setNegativeButton("Ustawienia telefonu") { _, _ ->
+                val i = Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, Reminders.CHANNEL)
+                try { startActivity(i) } catch (e: Exception) {
+                    startActivity(
+                        Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    )
+                }
+            }
+            .show()
+    }
+
+    /** Ile przed terminem przypominać o wydarzeniach z Google – zmienia też już pobrane. */
+    private fun chooseGoogleRemind() {
+        var choice = Fmt.remindIndex(CalendarImport.googleRemind(this))
+        AlertDialog.Builder(this)
+            .setTitle("Przypomnienie dla wydarzeń z Google")
+            .setSingleChoiceItems(Fmt.REMIND_LABELS, choice) { _, w -> choice = w }
+            .setPositiveButton("Zapisz") { _, _ ->
+                val v = Fmt.REMIND_VALUES[choice]
+                CalendarImport.setGoogleRemind(this, v)
+                worker.execute {
+                    val db = Db.get(applicationContext)
+                    db.importedFrom(Fmt.today()).filter { !it.done && it.minutes >= 0 }.forEach {
+                        it.remind = v
+                        db.save(it)
+                        Reminders.schedule(applicationContext, it)
+                    }
+                    runOnUiThread {
+                        if (!isFinishing) {
+                            load()
+                            Toast.makeText(this, "Zapisano – " + Fmt.REMIND_LABELS[choice].lowercase(Fmt.PL), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Anuluj", null)
+            .show()
     }
 
     // ---------- Kalendarz Google ----------

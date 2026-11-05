@@ -11,17 +11,59 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 object Reminders {
-    const val CHANNEL = "przypomnienia"
+    const val CHANNEL = "przypomnienia_dzwiek"
+    private const val OLD_CHANNEL = "przypomnienia"
     const val ACTION_ALARM = "pl.kuba.przypominacz.ALARM"
     const val ACTION_DONE = "pl.kuba.przypominacz.DONE"
 
     fun createChannel(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.deleteNotificationChannel(OLD_CHANNEL)
         if (nm.getNotificationChannel(CHANNEL) == null) {
-            val ch = NotificationChannel(CHANNEL, "Przypomnienia", NotificationManager.IMPORTANCE_HIGH)
-            ch.description = "Przypomnienia o wizytach i zadaniach"
+            val ch = NotificationChannel(CHANNEL, "Przypomnienia (z dźwiękiem)", NotificationManager.IMPORTANCE_HIGH)
+            ch.description = "Przypomnienia o wizytach i zadaniach – z dźwiękiem i wibracją"
+            ch.setSound(
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION),
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
             ch.enableVibration(true)
+            ch.vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
+            ch.enableLights(true)
+            ch.lightColor = 0xFF43A047.toInt()
+            ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             nm.createNotificationChannel(ch)
+        }
+    }
+
+    /** Czy powiadomienia mają szansę zadzwonić – zgoda, kanał nie wyciszony. */
+    fun soundProblem(ctx: Context): String? {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (!nm.areNotificationsEnabled()) return "Powiadomienia aplikacji są wyłączone."
+        val ch = nm.getNotificationChannel(CHANNEL) ?: return null
+        if (ch.importance < NotificationManager.IMPORTANCE_DEFAULT) return "Kanał przypomnień jest wyciszony."
+        if (ch.sound == null) return "Kanał przypomnień nie ma ustawionego dźwięku."
+        return null
+    }
+
+    /** Powiadomienie próbne – żeby sprawdzić dźwięk. */
+    fun showTest(ctx: Context) {
+        createChannel(ctx)
+        val n = androidx.core.app.NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setColor(0xFF43A047.toInt())
+            .setContentTitle("🔔 Test przypomnienia")
+            .setContentText("Tak będą wyglądać i brzmieć przypomnienia.")
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
+            .setDefaults(androidx.core.app.NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .build()
+        try {
+            androidx.core.app.NotificationManagerCompat.from(ctx).notify(999_999, n)
+        } catch (e: SecurityException) {
         }
     }
 

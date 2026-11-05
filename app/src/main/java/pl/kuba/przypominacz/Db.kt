@@ -240,12 +240,20 @@ class Db private constructor(ctx: Context) :
     fun widgetMonth(from: Long, to: Long, today: Long, current: Boolean): List<Task> =
         if (current) {
             query(
-                "(done=0 AND day<?) OR (day>=? AND day<=?)",
-                arrayOf(today.toString(), from.toString(), to.toString())
+                "done=0 AND (day<? OR (day>=? AND day<=?))",
+                arrayOf(today.toString(), today.toString(), to.toString())
             )
         } else {
-            query("day>=? AND day<=?", arrayOf(from.toString(), to.toString()))
+            query("done=0 AND day>=? AND day<=?", arrayOf(from.toString(), to.toString()))
         }
+
+    /** Ile wpisów zostało do zrobienia w danym okresie. */
+    fun countPending(from: Long, to: Long): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM tasks WHERE done=0 AND day>=? AND day<=?",
+            arrayOf(from.toString(), to.toString())
+        ).use { c -> return if (c.moveToFirst()) c.getInt(0) else 0 }
+    }
 
     fun countBetween(from: Long, to: Long): Int {
         readableDatabase.rawQuery(

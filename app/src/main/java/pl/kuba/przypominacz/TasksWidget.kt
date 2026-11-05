@@ -87,8 +87,9 @@ class TasksWidget : AppWidgetProvider() {
 
             val offset = monthOffset(ctx, wid)
             val ym = YearMonth.now().plusMonths(offset.toLong())
-            val count = Db.get(ctx).countBetween(ym.atDay(1).toEpochDay(), ym.atEndOfMonth().toEpochDay())
-            rv.setTextViewText(R.id.w_month, Fmt.monthName(ym) + " · " + Fmt.countLabel(count))
+            val from = if (offset == 0) Fmt.today() else ym.atDay(1).toEpochDay()
+            val count = Db.get(ctx).countPending(from, ym.atEndOfMonth().toEpochDay())
+            rv.setTextViewText(R.id.w_month, Fmt.monthName(ym) + " · do zrobienia: " + count)
             rv.setTextViewText(
                 R.id.w_empty,
                 if (offset == 0) "W tym miesiącu nic nie masz 🎉\nDotknij +, aby dodać"
@@ -163,7 +164,7 @@ class WidgetService : RemoteViewsService() {
             val list = Db.get(ctx).widgetMonth(from, to, today, offset == 0)
 
             val out = ArrayList<Row>()
-            val overdue = if (offset == 0) list.filter { it.day < today && !it.done } else emptyList()
+            val overdue = if (offset == 0) list.filter { it.day < today } else emptyList()
             if (overdue.isNotEmpty()) {
                 out.add(Row("⚠ Zaległe", null))
                 overdue.forEach { out.add(Row(null, it)) }
