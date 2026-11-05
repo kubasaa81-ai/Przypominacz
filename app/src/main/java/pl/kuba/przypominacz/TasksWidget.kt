@@ -1,5 +1,6 @@
 package pl.kuba.przypominacz
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -12,13 +13,24 @@ import android.text.Spanned
 import android.text.style.StrikethroughSpan
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
+import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 
 class TasksWidget : AppWidgetProvider() {
 
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
         ids.forEach { update(ctx, mgr, it) }
         mgr.notifyAppWidgetViewDataChanged(ids, R.id.w_list)
+        scheduleMidnight(ctx)
+    }
+
+    override fun onEnabled(ctx: Context) {
+        scheduleMidnight(ctx)
+    }
+
+    override fun onDisabled(ctx: Context) {
+        ctx.getSystemService(AlarmManager::class.java).cancel(midnightIntent(ctx))
     }
 
     override fun onDeleted(ctx: Context, ids: IntArray) {
@@ -49,6 +61,28 @@ class TasksWidget : AppWidgetProvider() {
                 val mgr = AppWidgetManager.getInstance(ctx)
                 update(ctx, mgr, wid)
                 mgr.notifyAppWidgetViewDataChanged(intArrayOf(wid), R.id.w_list)
+                // inny miesiąc → po 5 minutach widget sam wraca do bieżącego
+                val am = ctx.getSystemService(AlarmManager::class.java)
+                val back = nav(ctx, wid, ACTION_BACK, 6)
+                if (next == 0) am.cancel(back)
+                else am.setAndAllowWhileIdle(
+                    AlarmManager.RTC, System.currentTimeMillis() + BACK_AFTER_MS, back
+                )
+            }
+            ACTION_BACK -> {
+                if (wid == AppWidgetManager.INVALID_APPWIDGET_ID) return
+                prefs(ctx).edit().putInt("m_$wid", 0).apply()
+                val mgr = AppWidgetManager.getInstance(ctx)
+                update(ctx, mgr, wid)
+                mgr.notifyAppWidgetViewDataChanged(intArrayOf(wid), R.id.w_list)
+            }
+            ACTION_MIDNIGHT -> {
+                // nowy dzień (i nowy miesiąc 1-go) – wszystkie widgety na bieżący miesiąc
+                val e = prefs(ctx).edit()
+                prefs(ctx).all.keys.filter { it.startsWith("m_") }.forEach { e.putInt(it, 0) }
+                e.apply()
+                refresh(ctx)
+                scheduleMidnight(ctx)
             }
         }
     }
@@ -58,6 +92,33 @@ class TasksWidget : AppWidgetProvider() {
         const val ACTION_PREV = "pl.kuba.przypominacz.PREV_MONTH"
         const val ACTION_NEXT = "pl.kuba.przypominacz.NEXT_MONTH"
         const val ACTION_NOW = "pl.kuba.przypominacz.THIS_MONTH"
+        const val ACTION_BACK = "pl.kuba.przypominacz.BACK_TO_MONTH"
+        const val ACTION_MIDNIGHT = "pl.kuba.przypominacz.MIDNIGHT"
+        private const val BACK_AFTER_MS = 5 * 60_000L
+
+        private fun midnightIntent(ctx: Context): PendingIntent =
+            PendingIntent.getBroadcast(
+                ctx, 777,
+                Intent(ctx, TasksWidget::class.java).setAction(ACTION_MIDNIGHT),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+        /** Odświeżenie tuż po północy – nowy dzień, a 1-go nowy miesiąc. */
+        fun scheduleMidnight(ctx: Context) {
+            val at = LocalDate.now().plusDays(1).atTime(0, 0, 30)
+                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val am = ctx.getSystemService(AlarmManager::class.java)
+            val pi = midnightIntent(ctx)
+            try {
+                if (android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC, at, pi)
+                } else {
+                    am.setAndAllowWhileIdle(AlarmManager.RTC, at, pi)
+                }
+            } catch (e: SecurityException) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC, at, pi)
+            }
+        }
 
         fun prefs(ctx: Context) = ctx.getSharedPreferences("widget", Context.MODE_PRIVATE)
 
@@ -67,6 +128,7 @@ class TasksWidget : AppWidgetProvider() {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, TasksWidget::class.java))
             if (ids.isEmpty()) return
+            scheduleMidnight(ctx)
             ids.forEach { update(ctx, mgr, it) }
             mgr.notifyAppWidgetViewDataChanged(ids, R.id.w_list)
         }
