@@ -79,16 +79,21 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/e_dict_pick"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginEnd="6dp"
                     android:maxLines="2"
-                    android:minHeight="52dp"
+                    android:minHeight="60dp"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
                     android:text="📖 Ze słownika"
@@ -99,11 +104,15 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/e_dict_add"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:maxLines="2"
-                    android:minHeight="52dp"
+                    android:minHeight="60dp"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
                     android:text="➕ Do słownika"
@@ -134,6 +143,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
@@ -157,6 +167,71 @@
                     android:textColor="#424242"
                     android:textSize="14sp" />
             </LinearLayout>
+
+            <!-- Powtarzanie -->
+            <LinearLayout
+                android:id="@+id/e_repeat_box"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Label"
+                    android:text="🔁 Powtarzanie" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/card_bg">
+
+                    <Spinner
+                        android:id="@+id/e_repeat"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:minHeight="52dp"
+                        android:paddingEnd="40dp"
+                        android:spinnerMode="dropdown" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:layout_marginEnd="14dp"
+                        android:text="▼"
+                        android:textColor="#3949AB"
+                        android:textSize="14sp" />
+                </FrameLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/e_until"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="start|center_vertical"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="56dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:visibility="gone"
+                    app:backgroundTint="#8E24AA"
+                    app:cornerRadius="14dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/e_series_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="#F3E5F5"
+                android:padding="12dp"
+                android:textColor="#4A148C"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
             <!-- Panel: co już jest w tym dniu (kolizje) -->
             <LinearLayout
@@ -260,6 +335,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:layout_marginBottom="24dp"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton

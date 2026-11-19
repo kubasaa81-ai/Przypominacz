@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Lokalna baza SQLite – wszystko zostaje w telefonie, bez chmury. */
 class Db private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 3) {
+    SQLiteOpenHelper(ctx.applicationContext, "przypominacz.db", null, 4) {
 
     companion object {
         @Volatile private var inst: Db? = null
@@ -34,6 +34,12 @@ class Db private constructor(ctx: Context) :
         db.execSQL("CREATE INDEX idx_day ON tasks(day)")
         db.execSQL("CREATE INDEX idx_ext ON tasks(ext)")
         createCategoriesAndDict(db)
+        addSeriesColumn(db)
+    }
+
+    private fun addSeriesColumn(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE tasks ADD COLUMN series TEXT NOT NULL DEFAULT ''")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_series ON tasks(series)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -42,6 +48,7 @@ class Db private constructor(ctx: Context) :
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_ext ON tasks(ext)")
         }
         if (oldVersion < 3) createCategoriesAndDict(db)
+        if (oldVersion < 4) addSeriesColumn(db)
     }
 
     private fun createCategoriesAndDict(db: SQLiteDatabase) {
@@ -171,6 +178,7 @@ class Db private constructor(ctx: Context) :
         put("remind", t.remind)
         put("done", if (t.done) 1 else 0)
         put("ext", t.ext)
+        put("series", t.series)
     }
 
     fun save(t: Task): Long {
@@ -210,7 +218,8 @@ class Db private constructor(ctx: Context) :
                         notes = c.getString(c.getColumnIndexOrThrow("notes")) ?: "",
                         remind = c.getInt(c.getColumnIndexOrThrow("remind")),
                         done = c.getInt(c.getColumnIndexOrThrow("done")) == 1,
-                        ext = c.getString(c.getColumnIndexOrThrow("ext")) ?: ""
+                        ext = c.getString(c.getColumnIndexOrThrow("ext")) ?: "",
+                        series = c.getString(c.getColumnIndexOrThrow("series")) ?: ""
                     )
                 )
             }
@@ -266,6 +275,10 @@ class Db private constructor(ctx: Context) :
     fun importedFrom(today: Long) = query("ext LIKE 'g:%' AND day>=?", arrayOf(today.toString()))
 
     /** Wpisy utworzone w aplikacji (nie z Google), od dziś, niezrobione. */
+    /** Wpisy z tej samej serii cyklicznej, od podanego dnia. */
+    fun bySeries(series: String, fromDay: Long = Long.MIN_VALUE) =
+        query("series=? AND day>=?", arrayOf(series, fromDay.toString()))
+
     fun localFuture(today: Long) = query("ext='' AND done=0 AND day>=?", arrayOf(today.toString()))
 
     fun withReminders() = query("done=0 AND remind>=0", null)

@@ -276,6 +276,7 @@ class WidgetService : RemoteViewsService() {
                 append(Fmt.time(t.minutes))
                 if (t.day < Fmt.today()) append(" · ").append(Fmt.shortDate(t.day))
                 if (t.place.isNotBlank()) append(" · ").append(t.place)
+                if (t.repeating) append(" · 🔁")
                 if (t.fromGoogle) append(" · Google")
             }
             rv.setTextViewText(R.id.wi_sub, sub)

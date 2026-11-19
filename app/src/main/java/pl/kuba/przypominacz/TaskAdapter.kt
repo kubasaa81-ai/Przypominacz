@@ -69,6 +69,7 @@ class TaskAdapter(
             append("🕒 ").append(Fmt.time(t.minutes))
             if (t.place.isNotBlank()) append("   📍 ").append(t.place)
             if (t.remind >= 0 && !t.done) append("   🔔")
+            if (t.repeating) append("   🔁")
         }
 
         h.notes.visibility = if (t.notes.isBlank()) View.GONE else View.VISIBLE

@@ -20,7 +20,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
         android:background="#F5F7FB"
-        android:orientation="horizontal">
+        android:baselineAligned="false"
+                android:orientation="horizontal">
 
         <View
             android:id="@+id/c_bar"
@@ -69,7 +70,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="horizontal">
+        android:baselineAligned="false"
+                android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/c_open"

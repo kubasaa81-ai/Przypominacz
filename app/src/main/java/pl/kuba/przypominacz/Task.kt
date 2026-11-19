@@ -14,9 +14,11 @@ data class Task(
     var notes: String = "",
     var remind: Int = -1,       // ile minut przed, -1 = brak przypomnienia
     var done: Boolean = false,
-    var ext: String = ""        // "g:kalendarz:wydarzenie:początek" = pobrane z Kalendarza Google
+    var ext: String = "",       // "g:kalendarz:wydarzenie:początek" = pobrane z Kalendarza Google
+    var series: String = ""     // wspólny znacznik wpisów cyklicznych
 ) {
     val fromGoogle: Boolean get() = ext.startsWith("g:")
+    val repeating: Boolean get() = series.isNotEmpty()
 
     companion object {
         const val TYPE_TASK = 0

@@ -7,6 +7,7 @@ Prosta aplikacja na Androida – wizyty u lekarzy, zadania, przypomnienia i kale
 
 ## Co potrafi
 - Wpisy z datą, godziną (albo „cały dzień”), miejscem i notatką
+- Wpisy cykliczne: codziennie, co tydzień, co 2 tygodnie, co miesiąc, co rok – do wybranej daty (np. co tydzień przez miesiąc); zmiana i usuwanie „tylko ten” albo „ten i następne”
 - Własne rodzaje (Zadanie, Lekarz, Spotkanie, Zajęcia, Inne + dowolne nowe, z ikonką i kolorem) – każdy z osobnym słownikiem gotowych tytułów do wybierania z listy
 - Przy dodawaniu od razu widać, co już jest zaplanowane w tym dniu – na czerwono ta sama godzina, na pomarańczowo wpisy w odstępie do 60 min
 - Przypomnienia z dźwiękiem i wibracją, także dla wydarzeń z Kalendarza Google (domyślnie 1 godz. przed; przycisk 🔔 – test dźwięku i ustawienia) (w chwili terminu, 10/30 min, 1–2 godz., dzień lub 2 dni wcześniej) z przyciskiem „✓ Zrobione” w powiadomieniu

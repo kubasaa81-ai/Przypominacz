@@ -24,6 +24,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
+import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.math.abs
 
@@ -45,6 +46,20 @@ class EditActivity : AppCompatActivity() {
     private lateinit var remind: Spinner
     private lateinit var dayHeader: TextView
     private lateinit var dayRows: LinearLayout
+    private lateinit var repeatSpin: Spinner
+    private lateinit var untilBtn: MaterialButton
+
+    // Powtarzanie (tylko dla nowych wpisów)
+    private var rule = 0                 // indeks w REPEAT_LABELS
+    private var untilDay = 0L
+    private var untilManual = false
+
+    companion object {
+        val REPEAT_LABELS = arrayOf(
+            "Nie powtarzaj", "Codziennie", "Co tydzień", "Co 2 tygodnie", "Co miesiąc", "Co rok"
+        )
+        const val MAX_OCCURRENCES = 400
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +78,8 @@ class EditActivity : AppCompatActivity() {
         remind = findViewById(R.id.e_remind)
         dayHeader = findViewById(R.id.e_day_header)
         dayRows = findViewById(R.id.e_day_rows)
+        repeatSpin = findViewById(R.id.e_repeat)
+        untilBtn = findViewById(R.id.e_until)
 
         remind.adapter = ArrayAdapter(this, R.layout.spinner_item, Fmt.REMIND_LABELS).also {
             it.setDropDownViewResource(R.layout.spinner_item)
@@ -108,6 +125,34 @@ class EditActivity : AppCompatActivity() {
             hasTime = !checked
             refreshDateTime()
         }
+
+        // ---- Powtarzanie ----
+        repeatSpin.adapter = ArrayAdapter(this, R.layout.spinner_item, REPEAT_LABELS).also {
+            it.setDropDownViewResource(R.layout.spinner_item)
+        }
+        if (loaded != null) {
+            findViewById<View>(R.id.e_repeat_box).visibility = View.GONE
+            if (task.repeating) {
+                val all = Db.get(this).bySeries(task.series)
+                val pos = all.indexOfFirst { it.id == task.id } + 1
+                findViewById<TextView>(R.id.e_series_note).apply {
+                    visibility = View.VISIBLE
+                    text = "🔁 Wpis cykliczny – termin $pos z ${all.size} " +
+                        "(ostatni: ${Fmt.shortDate(all.last().day)}). Przy zapisie zapytam, " +
+                        "czy zmienić tylko ten termin, czy też wszystkie następne."
+                }
+            }
+        }
+        repeatSpin.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                if (pos == rule) return
+                rule = pos
+                if (!untilManual || untilDay < task.day) untilDay = defaultUntil()
+                refreshRepeat()
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        untilBtn.setOnClickListener { chooseUntil() }
 
         dateBtn.setOnClickListener { pickDate() }
         timeBtn.setOnClickListener { pickTime() }
@@ -360,9 +405,92 @@ class EditActivity : AppCompatActivity() {
             .build()
         picker.addOnPositiveButtonClickListener { sel ->
             task.day = sel / 86_400_000L
+            if (rule > 0 && (!untilManual || untilDay < task.day)) untilDay = defaultUntil()
             refreshDateTime()
+            refreshRepeat()
         }
         picker.show(supportFragmentManager, "date")
+    }
+
+    // ---------- Powtarzanie ----------
+
+    private fun start() = LocalDate.ofEpochDay(task.day)
+
+    private fun defaultUntil(): Long = when (rule) {
+        1 -> start().plusWeeks(2)
+        2 -> start().plusMonths(1)
+        3 -> start().plusMonths(2)
+        4 -> start().plusMonths(6)
+        5 -> start().plusYears(5)
+        else -> start()
+    }.toEpochDay()
+
+    /** Kolejne dni terminów – liczone zawsze od pierwszego dnia (31-go → koniec krótszego miesiąca). */
+    private fun occurrences(): List<Long> {
+        if (rule == 0) return listOf(task.day)
+        val s0 = start()
+        val out = ArrayList<Long>()
+        var i = 0L
+        while (out.size < MAX_OCCURRENCES) {
+            val d = when (rule) {
+                1 -> s0.plusDays(i)
+                2 -> s0.plusWeeks(i)
+                3 -> s0.plusWeeks(2 * i)
+                4 -> s0.plusMonths(i)
+                else -> s0.plusYears(i)
+            }.toEpochDay()
+            if (d > untilDay) break
+            out.add(d)
+            i++
+        }
+        return out
+    }
+
+    private fun refreshRepeat() {
+        if (rule == 0) {
+            untilBtn.visibility = View.GONE
+            return
+        }
+        untilBtn.visibility = View.VISIBLE
+        val n = occurrences().size
+        untilBtn.text = "📅  Do: " + Fmt.fullDate(untilDay) + "\n      = " + Fmt.countLabel(n).replace("wpis", "termin") +
+            if (n >= MAX_OCCURRENCES) " (maksimum)" else ""
+    }
+
+    private fun chooseUntil() {
+        val opts = arrayOf("1 miesiąc", "2 miesiące", "3 miesiące", "Pół roku", "1 rok", "2 lata", "Wybierz datę…")
+        AlertDialog.Builder(this)
+            .setTitle("Powtarzaj do kiedy?")
+            .setItems(opts) { _, w ->
+                val s0 = start()
+                val d = when (w) {
+                    0 -> s0.plusMonths(1)
+                    1 -> s0.plusMonths(2)
+                    2 -> s0.plusMonths(3)
+                    3 -> s0.plusMonths(6)
+                    4 -> s0.plusYears(1)
+                    5 -> s0.plusYears(2)
+                    else -> null
+                }
+                if (d != null) {
+                    untilDay = d.toEpochDay()
+                    untilManual = true
+                    refreshRepeat()
+                } else {
+                    val picker = MaterialDatePicker.Builder.datePicker()
+                        .setTitleText("Ostatni dzień powtarzania")
+                        .setSelection(untilDay * 86_400_000L)
+                        .build()
+                    picker.addOnPositiveButtonClickListener { sel ->
+                        untilDay = maxOf(sel / 86_400_000L, task.day)
+                        untilManual = true
+                        refreshRepeat()
+                    }
+                    picker.show(supportFragmentManager, "until")
+                }
+            }
+            .setNegativeButton("Anuluj", null)
+            .show()
     }
 
     private fun pickTime() {
@@ -484,15 +612,24 @@ class EditActivity : AppCompatActivity() {
         titleLayout.error = null
 
         val my = currentMinutes()
-        val clashes = othersThatDay().filter { clash(it, my) > 0 }
+        val days = if (task.id == 0L) occurrences() else listOf(task.day)
+        val db = Db.get(this)
+        val clashes = days.flatMap { d ->
+            db.byDay(d).filter { it.id != task.id && clash(it, my) > 0 }
+        }
         if (clashes.isNotEmpty()) {
-            val list = clashes.joinToString("\n") {
-                "• " + Fmt.time(it.minutes) + "  " + it.title +
+            val shown = clashes.take(12)
+            val list = shown.joinToString("\n") {
+                "• " + (if (days.size > 1) Fmt.shortDate(it.day) + ", " else "") +
+                    Fmt.time(it.minutes) + "  " + it.title +
                     if (clash(it, my) == 2) "  (ta sama godzina)" else ""
-            }
+            } + if (clashes.size > shown.size) "\n… i jeszcze ${clashes.size - shown.size}" else ""
             AlertDialog.Builder(this)
                 .setTitle("⚠ Kolizja terminów")
-                .setMessage("W tym dniu w pobliżu tej godziny masz już:\n\n$list\n\nZapisać mimo to?")
+                .setMessage(
+                    (if (days.size > 1) "W niektórych terminach w pobliżu tej godziny masz już:\n\n"
+                    else "W tym dniu w pobliżu tej godziny masz już:\n\n") + list + "\n\nZapisać mimo to?"
+                )
                 .setPositiveButton("Zapisz mimo to") { _, _ -> save(title) }
                 .setNegativeButton("Zmienię godzinę", null)
                 .show()
@@ -509,6 +646,88 @@ class EditActivity : AppCompatActivity() {
         task.notes = notesEdit.text?.toString()?.trim().orEmpty()
         task.remind = Fmt.REMIND_VALUES[remind.selectedItemPosition]
 
+        // Nowy wpis cykliczny → osobny wpis na każdy termin
+        if (task.id == 0L && rule > 0) {
+            saveSeries()
+            return
+        }
+        // Zmiana wpisu z serii → tylko ten czy też następne?
+        if (task.id != 0L && task.repeating && changed(before, task)) {
+            val following = Db.get(this).bySeries(task.series, before.day).filter { it.id != task.id }
+            if (following.isNotEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle("🔁 Wpis cykliczny")
+                    .setMessage("Zmienić tylko ten termin, czy też wszystkie następne terminy z tej serii (${following.size})?")
+                    .setPositiveButton("Ten i następne") { _, _ -> saveFollowing(before, following) }
+                    .setNeutralButton("Tylko ten") { _, _ -> saveOne(before) }
+                    .setNegativeButton("Anuluj", null)
+                    .show()
+                return
+            }
+        }
+        saveOne(before)
+    }
+
+    private fun changed(a: Task, b: Task) =
+        a.title != b.title || a.day != b.day || a.minutes != b.minutes || a.place != b.place ||
+            a.notes != b.notes || a.remind != b.remind || a.type != b.type
+
+    private fun saveSeries() {
+        val days = occurrences()
+        val series = "s" + System.currentTimeMillis()
+        val ctx = applicationContext
+        val proto = task.copy()
+        Toast.makeText(this, "Zapisuję ${Fmt.countLabel(days.size).replace("wpis", "termin")}…", Toast.LENGTH_SHORT).show()
+        Thread {
+            val db = Db.get(ctx)
+            val google = CalendarImport.writesToGoogle(ctx)
+            var pushed = 0
+            days.forEach { d ->
+                val t = proto.copy(id = 0, day = d, ext = "", series = series, done = false)
+                if (google && CalendarImport.pushNew(ctx, t)) pushed++
+                db.save(t)
+                Reminders.schedule(ctx, t)
+            }
+            TasksWidget.refresh(ctx)
+            runOnUiThread {
+                val msg = "Zapisano ✓ " + Fmt.countLabel(days.size).replace("wpis", "termin") +
+                    " (do " + Fmt.shortDate(days.last()) + ")" +
+                    if (google) ", w Kalendarzu Google: $pushed" else ""
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                finish()
+            }
+        }.start()
+    }
+
+    /** Zmienia ten termin i wszystkie następne z serii (przesunięcie daty też się przenosi). */
+    private fun saveFollowing(before: Task, following: List<Task>) {
+        val delta = task.day - before.day
+        val proto = task.copy()
+        val ctx = applicationContext
+        saveOne(before, close = false)
+        Thread {
+            val db = Db.get(ctx)
+            following.forEach { t ->
+                t.title = proto.title
+                t.type = proto.type
+                t.minutes = proto.minutes
+                t.place = proto.place
+                t.notes = proto.notes
+                t.remind = proto.remind
+                t.day += delta
+                if (t.fromGoogle) CalendarImport.pushUpdate(ctx, t)
+                db.save(t)
+                if (t.done) Reminders.cancel(ctx, t.id) else Reminders.schedule(ctx, t)
+            }
+            TasksWidget.refresh(ctx)
+            runOnUiThread {
+                Toast.makeText(ctx, "Zmieniono ten i ${following.size} następnych ✓", Toast.LENGTH_LONG).show()
+                finish()
+            }
+        }.start()
+    }
+
+    private fun saveOne(before: Task, close: Boolean = true) {
         // Synchronizacja z Kalendarzem Google
         var msg = "Zapisano ✓"
         if (task.ext.isEmpty()) {
@@ -528,8 +747,10 @@ class EditActivity : AppCompatActivity() {
         Db.get(this).save(task)
         if (task.done) Reminders.cancel(this, task.id) else Reminders.schedule(this, task)
         TasksWidget.refresh(this)
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-        finish()
+        if (close) {
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            finish()
+        }
     }
 
     private fun deleteHere(alsoGoogle: Boolean) {
@@ -548,7 +769,56 @@ class EditActivity : AppCompatActivity() {
         finish()
     }
 
+    /** Usuwa kilka wpisów (seria) – z Google też, jeśli to możliwe. */
+    private fun deleteMany(list: List<Task>) {
+        val ctx = applicationContext
+        Thread {
+            val db = Db.get(ctx)
+            var remote = 0
+            list.forEach { t ->
+                Reminders.cancel(ctx, t.id)
+                if (t.fromGoogle) {
+                    if (CalendarImport.deleteRemote(ctx, t)) remote++ else CalendarImport.skip(ctx, t.ext)
+                }
+                db.delete(t.id)
+            }
+            TasksWidget.refresh(ctx)
+            runOnUiThread {
+                Toast.makeText(
+                    ctx,
+                    "Usunięto: ${list.size}" + if (remote > 0) " (też z Kalendarza Google)" else "",
+                    Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+        }.start()
+    }
+
     private fun confirmDelete() {
+        if (task.repeating) {
+            val db = Db.get(this)
+            val all = db.bySeries(task.series)
+            if (all.size > 1) {
+                val following = all.filter { it.day >= task.day }
+                val opts = arrayOf(
+                    "Tylko ten termin (${Fmt.shortDate(task.day)})",
+                    "Ten i następne (${following.size})",
+                    "Całą serię (${all.size})"
+                )
+                AlertDialog.Builder(this)
+                    .setTitle("🗑 Usunąć wpis cykliczny?")
+                    .setItems(opts) { _, w ->
+                        when (w) {
+                            0 -> deleteMany(listOf(task))
+                            1 -> deleteMany(following)
+                            else -> deleteMany(all)
+                        }
+                    }
+                    .setNegativeButton("Anuluj", null)
+                    .show()
+                return
+            }
+        }
         val b = AlertDialog.Builder(this)
             .setTitle("Usunąć wpis?")
             .setMessage(task.title)
